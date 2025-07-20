@@ -61,7 +61,7 @@ const Text = ({
 		range.setEnd(textNode, Math.min(pos, str.length));
 
 		const rects = range.getClientRects();
-		if (rects.length > 0) {
+		if (rects.length > 0); {
 			const rect = rects[0];
 			const parentRect = Ref.getBoundingClientRect();
 
@@ -76,7 +76,7 @@ const Text = ({
 		const selection = window.getSelection();
 		if (!selection.rangeCount) return;
 
-		const range = selection.getRangeAt(0);
+		const range = selection.getRangeAt(0);;
 		const preCaretRange = range.cloneRange();
 		preCaretRange.selectNodeContents(ValueRef);
 		preCaretRange.setEnd(range.startContainer, range.startOffset);
@@ -87,11 +87,19 @@ const Text = ({
 
 	// stub:
 	const onKeyDown = (e) => {
-		e.preventDefault();
+		// e.preventDefault();
+		const curIndx = cursorPosition.get();
+		console.log(e.key);
 		switch (e.key) {
 			case 'ArrowLeft':
+				if (curIndx > 0) {
+					cursorPosition.set(curIndx - 1);
+				}
 				break;
 			case 'ArrowRight':
+				if (curIndx < value.get().length) {
+					cursorPosition.set(curIndx + 1);
+				}
 				break;
 			case 'Backspace':
 				break;
@@ -102,7 +110,7 @@ const Text = ({
 		}
 	};
 
-	Ref.addEventListener('keydown', onKeyDown);
+	window.addEventListener('keydown', onKeyDown);
 	Ref.addEventListener('click', onClick);
 
 	cleanup(() => {
@@ -119,13 +127,13 @@ const Text = ({
 		whiteSpace: 'pre-wrap',
 	}}>
 		<ValueRef children={[value]} />
-		<Shown value={cursorPosition}>
+		<Shown value={cursorPosition.map(c => c >= 0)}>
 			<CursorRef style={{
 				// Cursor blink animation.
 				opacity: Observer.timer(100).map(() => {
 					const delta = Date.now() - lastMoved.get();
 					if (delta < timeToFirstBlink) return 1;
-					return Math.floor((delta - timeToFirstBlink) / blinkInterval) % 2 === 0 ? 1 : 0;
+					return Math.floor((delta - timeToFirstBlink) / blinkInterval) % 2 === 0 ? 1 : 0
 				}),
 				position: 'absolute',
 				width: '4px',
