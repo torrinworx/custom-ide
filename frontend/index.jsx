@@ -4,6 +4,21 @@ import { Theme, Icons, Shown } from 'destamatic-ui';
 
 import theme from './theme.js';
 
+Theme.define({
+	textField: {
+		extends: 'typography_h1',
+		cursor: 'text',
+		position: 'relative',
+		outline: 'none',
+		whiteSpace: 'pre-wrap',
+	},
+	cursor: {
+		position: 'absolute',
+		width: '4px',
+		background: 'black',
+	}
+})
+
 /**
  * Creates a new linked-list line object:
  *  - value: the text inside the line
@@ -89,7 +104,9 @@ const Text = ({
 	const onKeyDown = (e) => {
 		// e.preventDefault();
 		const curIndx = cursorPosition.get();
-		console.log(e.key);
+		const curValue = value.get();
+
+		console.log(e);
 		switch (e.key) {
 			case 'ArrowLeft':
 				if (curIndx > 0) {
@@ -97,15 +114,28 @@ const Text = ({
 				}
 				break;
 			case 'ArrowRight':
-				if (curIndx < value.get().length) {
+				if (curIndx < curValue.length) {
 					cursorPosition.set(curIndx + 1);
 				}
 				break;
 			case 'Backspace':
+				if (curIndx > 0) {
+					value.set(curValue.slice(0, curIndx - 1) + curValue.slice(curIndx));
+					cursorPosition.set(curIndx - 1);
+				}
+				break;
+			case 'Delete':
+				if (curIndx < curValue.length) {
+					value.set(curValue.slice(0, curIndx) + curValue.slice(curIndx + 1));
+				}
 				break;
 			case 'Enter':
 				break;
 			default:
+				if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
+					value.set(curValue.slice(0, curIndx) + e.key + curValue.slice(curIndx));
+					cursorPosition.set(curIndx + 1);
+				}
 				break;
 		}
 	};
@@ -118,26 +148,17 @@ const Text = ({
 		Ref.removeEventListener('click', onClick);
 	});
 
-	cursorPosition.effect(updateCursorPosition);
+	cleanup(cursorPosition.effect(updateCursorPosition));
 
-	return <Ref theme='typography_h1' style={{
-		cursor: 'text',
-		position: 'relative',
-		outline: 'none',
-		whiteSpace: 'pre-wrap',
-	}}>
+	return <Ref theme='textField'>
 		<ValueRef children={[value]} />
 		<Shown value={cursorPosition.map(c => c >= 0)}>
-			<CursorRef style={{
-				// Cursor blink animation.
+			<CursorRef theme='cursor' style={{
 				opacity: Observer.timer(100).map(() => {
 					const delta = Date.now() - lastMoved.get();
 					if (delta < timeToFirstBlink) return 1;
 					return Math.floor((delta - timeToFirstBlink) / blinkInterval) % 2 === 0 ? 1 : 0
-				}),
-				position: 'absolute',
-				width: '4px',
-				background: 'black',
+				})
 			}} />
 		</Shown>
 	</Ref>;
