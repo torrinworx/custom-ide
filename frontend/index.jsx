@@ -1,6 +1,6 @@
 import { mount } from 'destam-dom';
-import { OArray, OObject, Observer, UUID } from 'destam';
-import { TextField, Typography, Theme, Icons } from 'destamatic-ui';
+import { OObject, Observer, UUID } from 'destam';
+import { Theme, Icons, Shown } from 'destamatic-ui';
 
 import theme from './theme.js';
 
@@ -38,13 +38,18 @@ const Text = ({
 	value,
 	ref: Ref,
 }, cleanup) => {
-	const cursorPosition = Observer.mutable(0);
+	const lastMoved = Observer.mutable(Date.now());
+	const timeToFirstBlink = 250; // Time in ms to wait before starting to blink
+	const blinkInterval = 400; // Blink phase duration in ms
+	const cursorPosition = Observer.mutable(null);
 
 	if (!Ref) Ref = <raw:div />;
 	const ValueRef = <raw:span />;
 	const CursorRef = <raw:div />;
 
 	const updateCursorPosition = () => {
+		lastMoved.set(Date.now());
+
 		const str = value.get();
 		const pos = cursorPosition.get();
 
@@ -107,19 +112,26 @@ const Text = ({
 
 	cursorPosition.effect(updateCursorPosition);
 
-	return <Ref theme='typography' style={{
+	return <Ref theme='typography_h1' style={{
 		cursor: 'text',
 		position: 'relative',
 		outline: 'none',
 		whiteSpace: 'pre-wrap',
 	}}>
 		<ValueRef children={[value]} />
-		<CursorRef style={{
-			opacity: Observer.timer(1000).map(t => t % 2 === 0 ? 0 : 1), // somehow disable if a recent change in the cursor position so that it's visibile directly after click?
-			position: 'absolute',
-			width: '1px',
-			background: 'black',
-		}} />
+		<Shown value={cursorPosition}>
+			<CursorRef style={{
+				// Cursor blink animation.
+				opacity: Observer.timer(100).map(() => {
+					const delta = Date.now() - lastMoved.get();
+					if (delta < timeToFirstBlink) return 1;
+					return Math.floor((delta - timeToFirstBlink) / blinkInterval) % 2 === 0 ? 1 : 0;
+				}),
+				position: 'absolute',
+				width: '4px',
+				background: 'black',
+			}} />
+		</Shown>
 	</Ref>;
 };
 
