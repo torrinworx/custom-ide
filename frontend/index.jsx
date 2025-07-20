@@ -38,41 +38,62 @@ const Text = ({
 	value,
 	ref: Ref,
 }, cleanup) => {
-	const cursorPosition = Observer.mutable(null);
+	const cursorPosition = Observer.mutable(0);
+
 	if (!Ref) Ref = <raw:div />;
+	const ValueRef = <raw:span />;
+	const CursorRef = <raw:div />;
 
-	const onKeyDown = (e) => {
-		e.preventDefault();
-		switch (e.key) {
-			case 'Enter': {
-			}
+	const updateCursorPosition = () => {
+		const str = value.get();
+		const pos = cursorPosition.get();
 
-			case 'Backspace': {
-				break;
-			}
+		const textNode = ValueRef.firstChild;
+		if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return;
 
-			case 'ArrowUp': {
-				break;
-			}
+		const range = document.createRange();
+		range.setStart(textNode, Math.min(pos, str.length));
+		range.setEnd(textNode, Math.min(pos, str.length));
 
-			case 'ArrowDown': {
-				break;
-			}
+		const rects = range.getClientRects();
+		if (rects.length > 0) {
+			const rect = rects[0];
+			const parentRect = Ref.getBoundingClientRect();
+
+			// Absolute positioning inside parent
+			CursorRef.style.left = `${rect.left - parentRect.left}px`;
+			CursorRef.style.top = `${rect.top - parentRect.top}px`;
+			CursorRef.style.height = `${rect.height}px`;
 		}
 	};
 
 	const onClick = (e) => {
 		const selection = window.getSelection();
-		if (selection.rangeCount > 0) {
-			const range = selection.getRangeAt(0);
-			const preCaretRange = range.cloneRange();
-			preCaretRange.selectNodeContents(Ref);
-			preCaretRange.setEnd(range.startContainer, range.startOffset);
-			const charIndex = preCaretRange.toString().length;
+		if (!selection.rangeCount) return;
 
-			cursorPosition.set(charIndex);
+		const range = selection.getRangeAt(0);
+		const preCaretRange = range.cloneRange();
+		preCaretRange.selectNodeContents(ValueRef);
+		preCaretRange.setEnd(range.startContainer, range.startOffset);
+		const charIndex = preCaretRange.toString().length;
 
-			console.log('Character index:', charIndex);
+		cursorPosition.set(charIndex);
+	};
+
+	// stub:
+	const onKeyDown = (e) => {
+		e.preventDefault();
+		switch (e.key) {
+			case 'ArrowLeft':
+				break;
+			case 'ArrowRight':
+				break;
+			case 'Backspace':
+				break;
+			case 'Enter':
+				break;
+			default:
+				break;
 		}
 	};
 
@@ -84,51 +105,21 @@ const Text = ({
 		Ref.removeEventListener('click', onClick);
 	});
 
-	const Cursor = () => <div style={{
-		borderLeft: '1px solid black',
-		display: 'inline-block',
-		height: '1em',
+	cursorPosition.effect(updateCursorPosition);
+
+	return <Ref theme='typography' style={{
+		cursor: 'text',
 		position: 'relative',
-		animation: 'blink 1s step-start infinite',
-	}} />
-
-	// There will only ever need to be a max of two spans, one before and another after the cursor.
-	// Therefore we can use a simplified approach that
-
-	const elements = OArray([value]);
-
-	cursorPosition.effect(e => {
-		// on each cursorPosition update, split the "value" where the index is
-		const str = value.get()
-		const first = str.slice(0, e);
-		const second = str.slice(e);
-		console.log('FIRST: ', first, '\nSECOND: ', second);
-
-		/*
-		basically:
-		if first is empty string, cursor is at the start of the array
-		if second string is empty string, cursor is at the end of the value
-		if both have valid strings, cursor is in between.
-		*/
-
-		//
-
-		if (first || second) {
-			elements.splice(0, elements.length, [
-				first,
-				<Cursor />,
-				second,
-			]);
-		}
-	})
-
-
-	return <Ref
-		style={{
-			cursor: 'text'
-		}}
-	>
-		{elements}
+		outline: 'none',
+		whiteSpace: 'pre-wrap',
+	}}>
+		<ValueRef children={[value]} />
+		<CursorRef style={{
+			opacity: Observer.timer(1000).map(t => t % 2 === 0 ? 0 : 1), // somehow disable if a recent change in the cursor position so that it's visibile directly after click?
+			position: 'absolute',
+			width: '1px',
+			background: 'black',
+		}} />
 	</Ref>;
 };
 
