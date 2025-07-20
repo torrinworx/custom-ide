@@ -1,5 +1,5 @@
 import { mount } from 'destam-dom';
-import { OObject, Observer, UUID } from 'destam';
+import { OArray, OObject, Observer, UUID, createNetwork } from 'destam';
 import { Theme, Icons, Shown } from 'destamatic-ui';
 
 import theme from './theme.js';
@@ -101,7 +101,7 @@ value.effect(e => {
 */
 
 const Text = ({
-	value,
+	value, // need to somehow keep value incoming as a parameter observer for the user, but also allow for network history below.
 	cursor = null,
 	ref: Ref,
 }, cleanup) => {
@@ -115,6 +115,25 @@ const Text = ({
 	const timeToFirstBlink = 250; // Time in ms to wait before starting to blink
 	const blinkInterval = 400; // Blink phase duration in ms
 
+	const history = OArray([]); // temp history state for ctrl + z (undo) and ctrl + shift + z (redo)
+	const network = createNetwork(value);
+
+	network.digest(() => {
+		console.log("Changes here!!!", a, b, c, d);
+		// const clientChanges = stringify(
+		// 	changes,
+		// 	{ observerRefs: observerRefs, observerNetwork: network }
+		// );
+		// await modReq('sync', { clientChanges: clientChanges })
+	});
+
+	history.observer.watch(e => {
+		console.log("HISTORY: ", e);
+	});
+
+	value.watch(e => {
+		console.log("VALUE: ", e);
+	});
 
 	const updateCursorPosition = () => {
 		lastMoved.set(Date.now());
@@ -152,6 +171,17 @@ const Text = ({
 		cursor.set(charIndex);
 	};
 
+	const onPaste = (e) => {
+		e.preventDefault();
+		const pasteText = e.clipboardData.getData('text/plain');
+		const curIndx = cursor.get();
+		const curValue = value.get();
+
+		const newValue = curValue.slice(0, curIndx) + pasteText + curValue.slice(curIndx);
+		value.set(newValue);
+		cursor.set(curIndx + pasteText.length);
+	};
+
 	const findWordBoundaryLeft = (text, index) => {
 		let i = index;
 		while (i > 0 && text[i - 1] === ' ') i--;
@@ -167,9 +197,10 @@ const Text = ({
 	};
 
 	// stub:
-	const onKeyDown = (e) => {
+	const onKeyDown = async (e) => {
 		const curIndx = cursor.get();
 		const curValue = value.get();
+		console.log(e.key);
 
 		switch (e.key) {
 			case 'ArrowLeft':
@@ -180,7 +211,6 @@ const Text = ({
 					cursor.set(newIndex);
 				}
 				break;
-
 			case 'ArrowRight':
 				if (curIndx < curValue.length) {
 					const newIndex = e.ctrlKey
@@ -190,6 +220,7 @@ const Text = ({
 				}
 				break;
 
+			// TODO: For Delete and Backspace: if text is currently selected, and backspace/delete pressed, remove that text from value.
 			case 'Backspace':
 				if (curIndx > 0) {
 					const start = e.ctrlKey
@@ -199,7 +230,6 @@ const Text = ({
 					cursor.set(start);
 				}
 				break;
-
 			case 'Delete':
 				if (curIndx < curValue.length) {
 					const end = e.ctrlKey
@@ -221,10 +251,12 @@ const Text = ({
 
 	window.addEventListener('keydown', onKeyDown);
 	Ref.addEventListener('click', onClick);
+	Ref.addEventListener('paste', onPaste);
 
 	cleanup(() => {
 		window.removeEventListener('keydown', onKeyDown);
 		Ref.removeEventListener('click', onClick);
+		Ref.removeEventListener('paste', onPaste);
 	});
 
 	cleanup(cursor.effect(updateCursorPosition));
@@ -232,6 +264,8 @@ const Text = ({
 	if (cursor.get() && typeof cursor.get() === 'number') {
 		queueMicrotask(updateCursorPosition);
 	}
+
+	console.log(value);
 
 	return <Ref theme='textField'>
 		<ValueRef >
