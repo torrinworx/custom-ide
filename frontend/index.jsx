@@ -98,10 +98,16 @@ value.effect(e => {
 	}
 })
 
+
+TODO:
+- Add temp history, maybe we don't need network? Just an array with value.effect? for ctrl + z and ctrl + shift + z
+- For larger history, cross lines, for something like an ide, let's assume some external
+  network thing will work with value somehow.
+- Select text - fix cursor to end at the end of a selection, right now this is broken
 */
 
 const Text = ({
-	value, // need to somehow keep value incoming as a parameter observer for the user, but also allow for network history below.
+	value,
 	cursor = null,
 	ref: Ref,
 }, cleanup) => {
@@ -114,26 +120,6 @@ const Text = ({
 	const lastMoved = Observer.mutable(Date.now());
 	const timeToFirstBlink = 250; // Time in ms to wait before starting to blink
 	const blinkInterval = 400; // Blink phase duration in ms
-
-	const history = OArray([]); // temp history state for ctrl + z (undo) and ctrl + shift + z (redo)
-	const network = createNetwork(value);
-
-	network.digest(() => {
-		console.log("Changes here!!!", a, b, c, d);
-		// const clientChanges = stringify(
-		// 	changes,
-		// 	{ observerRefs: observerRefs, observerNetwork: network }
-		// );
-		// await modReq('sync', { clientChanges: clientChanges })
-	});
-
-	history.observer.watch(e => {
-		console.log("HISTORY: ", e);
-	});
-
-	value.watch(e => {
-		console.log("VALUE: ", e);
-	});
 
 	const updateCursorPosition = () => {
 		lastMoved.set(Date.now());
@@ -264,8 +250,6 @@ const Text = ({
 	if (cursor.get() && typeof cursor.get() === 'number') {
 		queueMicrotask(updateCursorPosition);
 	}
-
-	console.log(value);
 
 	return <Ref theme='textField'>
 		<ValueRef >
