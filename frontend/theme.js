@@ -37,9 +37,9 @@ const theme = OObject({
     // },
 
 
-    focused: {
-        boxShadow: 'none',
-    },
+    // focused: {
+    //     boxShadow: 'none',
+    // },
 
     field: {
         extends: 'typography_p1_regular',
