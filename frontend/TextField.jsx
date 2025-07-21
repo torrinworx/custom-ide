@@ -1,6 +1,8 @@
 import { Observer } from 'destam';
 import { Theme, Shown } from 'destamatic-ui';
 
+import { Typography } from './Typography';
+
 Theme.define({
 	textField: {
 		extends: 'typography_h1',
@@ -34,54 +36,6 @@ Features:
   until the user scrolls to them. This prevents lag and keeps the number/indexing processing efficient.
 - programming language syntax highlighting. Equivelent to a styled <codeblock /> element. allows you to select a langauge
   that automatically converts the text into different colours.
-
-
-Idea: modifier system that uses regex? If string == "hello world", automatically splice that out
-before rendering it. and modify it according to the users modifiers?
-const modifiers = [
-	(value) => {
-		if (value.get() === 'hello world') {
-			return <div style={{ color: 'red' }}>HELLO WORLD</div>
-		}
-	}
-];
-
-allows for regex? which could mean easier integration with https://highlightjs.org/ or something like that? idk.
-would be cool
-
-could also allow for links and inline popups easily:
-const modifiers = [
-	(value) => {
-		if (value.get() === 'hello world') {
-			return <Button onClick={() => console.log('hello world')} >HELLO WORLD</Button>
-		}
-	}
-];
-
-then the result of the modifier is returned and rendered. I'm confused on the best way to do this though.
-
-because the above is computationally wastful.
-
-Maybe something like this:
-
-const modifiers = [
-	{
-		check: /^hello world$/, // could be regex, or string to auto compare to.
-		return: () => {
-			return <Button onClick={() => console.log('hello world')} >HELLO WORLD</Button>
-		}
-	}
-];
-
-then below we do: 
-value.effect(e => {
-	for i in modifiers {
-		if (e === i.check) { // contains this? Idk how to find the exact string inside this (e) string
-			// slice value into two separate spans, before and after the regex match
-			// i.return is then rendered between those two spans. 
-		}
-	}
-})
 
 TODO:
 - Add temp history, maybe we don't need network? Just an array with value.effect? for ctrl + z and ctrl + shift + z
@@ -302,6 +256,7 @@ export const TextField = ({
 	// Manually set tabindex so that focus/blur are enabled on WrapperRef. Let's us avoid having to manually pipe a custom focus/blur.
 	return <WrapperRef theme='textField' role="textbox" tabindex={tabIndex} {...props}>
 		<ValueRef>
+			{/* <Typography label={value.map(v => v === '' ? '\u200B' : v)} /> */}
 			{value.map(v => v === '' ? '\u200B' : v)}
 		</ValueRef>
 		<Shown value={cursor.map(c => c !== null)}>

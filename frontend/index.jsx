@@ -1,6 +1,6 @@
 import { mount } from 'destam-dom';
 import { Observer } from 'destam';
-import { Theme, Icons, Shown } from 'destamatic-ui';
+import { Theme, Icons, Button } from 'destamatic-ui';
 
 import theme from './theme';
 import TextField from './TextField';
@@ -8,7 +8,7 @@ import { Typography, TextModifiers } from './Typography';
 
 
 // Example/test:
-const value = Observer.mutable('Hello World!');
+const value = Observer.mutable('Hello World! :frog: :heart: :turtle:');
 const cursor = Observer.mutable(6);
 const selection = Observer.mutable({ start: 6, end: 12 });
 Observer.timer(1000).watch(() => {
@@ -24,15 +24,38 @@ const cursorRef = <raw:div>
 	🫨
 </raw:div>
 
-const value2 = Observer.mutable('Welcome!')
+const emojis = {
+	frog: '🐸',
+	smile: '😄',
+	heart: '❤️',
+	fire: '🔥',
+	turtle: '🐢',
+};
 
 mount(document.body, <Theme value={theme.theme}>
 	<Icons value={theme.icons}>
-		<TextField style={{ background: 'black' }} value={value} cursor={cursor} />
-		<TextField style={{ background: 'black' }} value={value2} cursorRef={cursorRef} />
 
-		<TextModifiers value={[]} >
-			<Typography />
+		<TextModifiers value={[
+			{
+				check: '!',
+				return: (match) => <span style={{ color: 'red' }}>{match}</span>,
+			},
+			{
+				check: /hello/gi,
+				return: (match) => <Button type='text' onClick={() => alert(match)}>{match}</Button>,
+			},
+			{
+				check: /:([a-zA-Z0-9_]+):/g,
+				return: (match) => {
+					const key = match.slice(1, -1); // remove surrounding colons
+					const emoji = emojis[key];
+					return emoji ? <span>{emoji}</span> : match;
+				}
+			}
+		]} >
+			<TextField style={{ background: 'black' }} value={value} cursorRef={cursorRef} />
+
+			<Typography label={value} />
 		</TextModifiers>
 	</Icons>
 </Theme>);
