@@ -7,7 +7,7 @@ import TextField from './TextField';
 import { Typography, TextModifiers } from './Typography';
 
 // Example/test:
-const value = Observer.mutable('Hello World! :frog: :heart: :turtle:');
+const value = Observer.mutable('Hello World! :frog: :heart: :turtle: ????');
 const cursor = Observer.mutable(6);
 const selection = Observer.mutable({ start: 6, end: 12 });
 Observer.timer(1000).watch(() => {
@@ -33,11 +33,20 @@ const emojis = {
 
 mount(document.body, <Theme value={theme.theme}>
 	<Icons value={theme.icons}>
-
 		<TextModifiers value={[
 			{
 				check: '!',
 				return: (match) => <span style={{ color: 'red' }}>{match}</span>,
+			},
+			{
+				check: '?',
+				return: (match) => {
+					const hover = Observer.mutable(false);
+					return <span
+						isHovered={hover}
+						style={{ cursor: 'pointer', color: hover.bool('purple', 'pink') }}
+					>{match}</span>
+				},
 			},
 			{
 				check: /hello/gi,
