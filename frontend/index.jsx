@@ -195,7 +195,7 @@ const Text = ({
 
 	const onKeyDown = async (e) => {
 		e.preventDefault();
-	
+
 		if (!isFocused.get()) return;
 		const curIndx = cursor.get();
 		const curValue = value.get();
@@ -325,11 +325,6 @@ const Text = ({
 const value = Observer.mutable('Hello World!');
 const cursor = Observer.mutable(6);
 const selection = Observer.mutable({ start: 6, end: 12 });
-
-const cursorRef = <raw:div>
-	🫨
-</raw:div>
-
 Observer.timer(1000).watch(() => {
 	const sel = selection.get();
 	if (sel.start === 6 && sel.end === 12) {
@@ -339,11 +334,15 @@ Observer.timer(1000).watch(() => {
 	}
 });
 
+const cursorRef = <raw:div>
+	🫨
+</raw:div>
+
 const value2 = Observer.mutable('Welcome!')
 
 mount(document.body, <Theme value={theme.theme}>
 	<Icons value={theme.icons}>
-		<Text style={{ background: 'black' }} value={value} cursor={cursor}/>
+		<Text style={{ background: 'black' }} value={value} cursor={cursor} />
 		<Text style={{ background: 'black' }} value={value2} cursorRef={cursorRef} />
 
 	</Icons>
