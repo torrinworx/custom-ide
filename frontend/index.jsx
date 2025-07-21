@@ -18,10 +18,6 @@ Observer.timer(1000).watch(() => {
 	}
 });
 
-const cursorRef = <raw:div>
-	🫨
-</raw:div>
-
 const emojis = {
 	frog: '🐸',
 	smile: '😄',
@@ -32,6 +28,8 @@ const emojis = {
 
 mount(document.body, <Theme value={theme.theme}>
 	<Icons value={theme.icons}>
+		<TextField style={{ background: 'black' }} value={value} />
+
 		<TextModifiers value={[
 			{
 				check: '!',
@@ -49,7 +47,7 @@ mount(document.body, <Theme value={theme.theme}>
 			},
 			{
 				check: /hello/gi,
-				return: (match) => <Button type='text' onClick={() => alert(match)}>{match}</Button>,
+				return: (match) => <Button type='contained' onClick={() => alert(match)}>{match}</Button>,
 			},
 			{
 				check: /:([a-zA-Z0-9_]+):/g,
@@ -60,7 +58,6 @@ mount(document.body, <Theme value={theme.theme}>
 				}
 			}
 		]} >
-			<TextField style={{ background: 'black' }} value={value} cursorRef={cursorRef} />
 			<Typography label={value} />
 			<Typography>
 				Hello World!

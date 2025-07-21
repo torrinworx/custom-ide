@@ -20,7 +20,7 @@ Theme.define({
 })
 
 /*
-Text is a fully custom, destamatic-ui, ground up text input component.
+TextField is a fully custom, destamatic-ui, ground up text input component.
 
 The existing textarea and input with type text browser primities don't offer
 enough customization. This component combines the two, while offering the 
@@ -143,14 +143,13 @@ export const TextField = ({
 	};
 
 	const onKeyDown = async (e) => {
-		e.preventDefault();
-
 		if (!isFocused.get()) return;
 		const curIndx = cursor.get();
 		const curValue = value.get();
 		const { start, end } = selection.get();
 		const [minIndx, maxIndx] = [Math.min(start, end), Math.max(start, end)];
 
+		// TODO: Ctrl + a selection disables default and only selects all text within value.
 		switch (e.key) {
 			case 'ArrowLeft':
 				if (start != null || end != null) {
@@ -253,11 +252,11 @@ export const TextField = ({
 
 	// Manually set tabindex so that focus/blur are enabled on WrapperRef. Let's us avoid having to manually pipe a custom focus/blur.
 	return <WrapperRef theme='textField' role="textbox" tabindex={tabIndex} {...props}>
-		<ValueRef>
-			{/* ValueRef is failing here for some reason, unable to set cursor position with weird elements beneath it. */}
-			{/* <Typography ref={ValueRef} label={value.map(v => v === '' ? '\u200B' : v)} /> */}
-			{value.map(v => v === '' ? '\u200B' : v)}
-		</ValueRef>
+		{/* <ValueRef> */}
+		{/* ValueRef is failing here for some reason, unable to set cursor position with weird elements beneath it. */}
+		<Typography ref={ValueRef} label={value.map(v => Observer.mutable(v === '' ? '\u200B' : v)).unwrap()} />
+		{/* {value.map(v => v === '' ? '\u200B' : v)} */}
+		{/* </ValueRef> */}
 		<Shown value={cursor.map(c => c !== null)}>
 			<CursorRef theme='cursor' style={{
 				opacity: Observer.timer(blinkInterval).map(() => {
