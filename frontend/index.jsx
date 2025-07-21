@@ -1,5 +1,5 @@
 import { mount } from 'destam-dom';
-import { OArray, OObject, Observer, UUID, createNetwork } from 'destam';
+import { OObject, Observer, UUID } from 'destam';
 import { Theme, Icons, Shown } from 'destamatic-ui';
 
 import theme from './theme.js';
@@ -11,13 +11,15 @@ Theme.define({
 		position: 'relative',
 		outline: 'none',
 		whiteSpace: 'pre-wrap',
+		color: 'white',
 	},
-	cursor: { // some cool way to invert the colors of the contents beneath the cursor? Like in vscode?
+	cursor: { // TODO:  some cool way to invert the colors of the contents beneath the cursor? Like in vscode?
 		extends: 'radius',
 		position: 'absolute',
 		width: 8,
-		background: 'black',
-	}
+		background: 'white',
+	},
+	// TODO: Look into styling and themeing selected text??
 })
 
 /**
@@ -109,21 +111,23 @@ TODO:
 const Text = ({
 	value,
 	cursor = null,
-	selection = { start: 0, end: null },
+	selection = { start: null, end: null },
 	wrapperRef: WrapperRef = <raw:div />,
 	valueRef: ValueRef = <raw:span />,
-	cursorRef: CursorRef = <raw:div />
+	cursorRef: CursorRef = <raw:div />,
+	tabIndex = 0,
+	...props
 }, cleanup) => {
 	if (!(cursor instanceof Observer)) cursor = Observer.mutable(cursor);
 	if (!(selection instanceof Observer)) selection = Observer.mutable(selection);
 
 	const mouseUp = Observer.mutable(false);
+	const isFocused = Observer.mutable(false);
 	const lastMoved = Observer.mutable(Date.now());
 	const timeToFirstBlink = 250; // Time in ms to wait before starting to blink
 	const blinkInterval = 400; // Blink phase duration in ms
 
 	const updateCursorPosition = (pos) => {
-		console.log(pos);
 		lastMoved.set(Date.now());
 
 		const textNode = ValueRef.firstChild;
@@ -145,10 +149,10 @@ const Text = ({
 	};
 
 	const getCursorPos = (e) => {
-		const selection = window.getSelection();
-		if (!selection.rangeCount) return null;
+		const windowSelection = window.getSelection();
+		if (!windowSelection.rangeCount) return null;
 
-		const range = selection.getRangeAt(0);
+		const range = windowSelection.getRangeAt(0);
 		const preCaretRange = range.cloneRange();
 		preCaretRange.selectNodeContents(ValueRef);
 		preCaretRange.setEnd(range.startContainer, range.startOffset);
@@ -157,19 +161,21 @@ const Text = ({
 
 	const onClick = (e) => {
 		if (!mouseUp) {
+			isFocused.set(true);
 			const charIndex = getCursorPos(e);
 			if (charIndex !== null) {
-				cursor.set(charIndex);
+				// cursor.set(charIndex);
 			}
 		}
 	};
 
+	// possible bug: if the onMouseUp is outside the WrapperRef the cursor location isn't updated to finalIndex properly?
 	const onMouseUp = (e) => {
 		mouseUp.set(true);
-		const selection = window.getSelection();
-		if (!selection.rangeCount) return;
+		const windowSelection = window.getSelection();
+		if (!windowSelection.rangeCount) return;
 
-		const range = selection.getRangeAt(0);
+		const range = windowSelection.getRangeAt(0);
 
 		const preCaretRange = range.cloneRange();
 		preCaretRange.selectNodeContents(ValueRef);
@@ -181,19 +187,24 @@ const Text = ({
 		postCaretRange.setEnd(range.endContainer, range.endOffset);
 		const endIndex = postCaretRange.toString().length;
 
+		selection.set({ start: startIndex, end: endIndex }); // TODO: Add handler for when selection is canceled: selection.set({ start: null, end: null});
+
+		// Somehow this got messed up?
 		// Check if the selection was made from start-to-end or end-to-start
 		// And select the focus position as the endpoint of the selection.
+		console.log(windowSelection);
 		let finalIndex;
-		if (selection.anchorOffset < selection.focusOffset) {
+		if (windowSelection.anchorOffset < windowSelection.focusOffset) {
 			finalIndex = endIndex; // Selection was made from start to end
 		} else {
 			finalIndex = startIndex; // Selection was made from end to start
 		}
-
+		console.log(finalIndex);
 		cursor.set(finalIndex);
 		mouseUp.set(false);
-	};
 
+		console.log(cursor.get());
+	};
 
 	const onPaste = (e) => {
 		e.preventDefault();
@@ -221,6 +232,7 @@ const Text = ({
 	};
 
 	const onKeyDown = async (e) => {
+		if (!isFocused.get()) return;
 		const curIndx = cursor.get();
 		const curValue = value.get();
 
@@ -275,29 +287,63 @@ const Text = ({
 
 	// TODO: On mouse up, after a selection, move the cursor to where the user has finished selecting, the oposite of the initial onMouseDown cursor.get() value somehow?
 
-	window.addEventListener('keydown', onKeyDown);
+	const onFocus = () => isFocused.set(true);
+	const onBlur = () => {
+		isFocused.set(false);
+
+		cursor.set(null);
+	};
+
+	WrapperRef.addEventListener('keydown', onKeyDown);
 	WrapperRef.addEventListener('click', onClick);
 	WrapperRef.addEventListener('paste', onPaste);
 	WrapperRef.addEventListener('mouseup', onMouseUp);
+	WrapperRef.addEventListener('focus', onFocus, true);
+	WrapperRef.addEventListener('blur', onBlur, true);
 
 	cleanup(() => {
-		window.removeEventListener('keydown', onKeyDown);
+		WrapperRef.removeEventListener('keydown', onKeyDown);
 		WrapperRef.removeEventListener('click', onClick);
 		WrapperRef.removeEventListener('paste', onPaste);
 		WrapperRef.removeEventListener('mouseup', onMouseUp);
+		WrapperRef.removeEventListener('focus', onFocus, true);
+		WrapperRef.removeEventListener('blur', onBlur, true);
 	});
 
 	cleanup(cursor.effect(updateCursorPosition));
 
-	if (cursor.get() && typeof cursor.get() === 'number') {
-		queueMicrotask(updateCursorPosition);
-	}
+	const selectionChange = (sel) => {
+		if (!sel || typeof sel.start !== 'number' || typeof sel.end !== 'number') return;
 
-	return <WrapperRef theme='textField' role="textbox">
+		const textNode = ValueRef.firstChild;
+		if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return;
+
+		const range = document.createRange();
+		range.setStart(textNode, Math.min(sel.start, textNode.length));
+		range.setEnd(textNode, Math.min(sel.end, textNode.length));
+
+		const selection = window.getSelection();
+		if (!selection) return;
+
+		selection.removeAllRanges();
+		selection.addRange(range);
+	};
+
+	// watch selection for user updates and apply to browser selection
+	cleanup(selection.effect(selectionChange));
+
+	queueMicrotask(selectionChange);
+	queueMicrotask(updateCursorPosition);
+
+	// TODO: onClick or onMouseDown outside of WrapperRef, run cursor.set(null); so that it wont appear anymore.
+	// TODO: Fix multiple Text components on the same page with key downs. only have keydowns on WrapperRef not window?
+
+	// Manually set tabindex so that focus/blur are enabled on WrapperRef. Let's us avoid having to manually pipe a custom focus/blur.
+	return <WrapperRef theme='textField' role="textbox" tabindex={tabIndex} {...props}>
 		<ValueRef>
 			{value.map(v => v === '' ? '\u200B' : v)}
 		</ValueRef>
-		<Shown value={cursor.map(p => p !== null)}>
+		<Shown value={cursor.map(c => c !== null)}>
 			<CursorRef theme='cursor' style={{
 				opacity: Observer.timer(100).map(() => {
 					const delta = Date.now() - lastMoved.get();
@@ -311,9 +357,24 @@ const Text = ({
 
 // Example/test:
 const value = Observer.mutable('Hello World!');
+const cursor = Observer.mutable(6);
+const selection = Observer.mutable({ start: 6, end: 12 });
+
+Observer.timer(1000).watch(() => {
+	const sel = selection.get();
+	if (!sel || typeof sel.start !== 'number' || typeof sel.end !== 'number') return;
+	if (sel.start === 6 && sel.end === 12) {
+		selection.set({ start: 0, end: 6 });
+	} else {
+		selection.set({ start: 6, end: 12 });
+	}
+});
+
+const value2 = Observer.mutable('Welcome!')
 
 mount(document.body, <Theme value={theme.theme}>
 	<Icons value={theme.icons}>
-		<Text value={value} />
+		<Text style={{ background: 'black' }} value={value} cursor={cursor} />
+		<Text style={{ background: 'black' }} value={value2} />
 	</Icons>
 </Theme>);
