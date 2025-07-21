@@ -1,7 +1,5 @@
 import { Observer } from 'destam';
-import { Theme, Shown } from 'destamatic-ui';
-
-import { Typography } from './Typography';
+import { Theme, Shown, Typography } from 'destamatic-ui';
 
 Theme.define({
 	textField: {

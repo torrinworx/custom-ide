@@ -1,10 +1,9 @@
 import { mount } from 'destam-dom';
 import { Observer } from 'destam';
-import { Theme, Icons, Button } from 'destamatic-ui';
+import { Theme, Icons, Button, Typography, TextModifiers } from 'destamatic-ui';
 
 import theme from './theme';
 import TextField from './TextField';
-import { Typography, TextModifiers } from './Typography';
 
 // Example/test:
 const value = Observer.mutable('Hello World! :frog: :heart: :turtle: ????');
