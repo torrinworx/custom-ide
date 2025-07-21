@@ -98,33 +98,33 @@ value.effect(e => {
 	}
 })
 
-
 TODO:
 - Add temp history, maybe we don't need network? Just an array with value.effect? for ctrl + z and ctrl + shift + z
 - For larger history, cross lines, for something like an ide, let's assume some external
   network thing will work with value somehow.
 - Select text - fix cursor to end at the end of a selection, right now this is broken
+- Shift + arrow keys == select text, each arrow key press in either direction adds or subtracts from the selection like in a code editor.
 */
 
 const Text = ({
 	value,
 	cursor = null,
-	ref: Ref,
+	selection = { start: 0, end: null },
+	wrapperRef: WrapperRef = <raw:div />,
+	valueRef: ValueRef = <raw:span />,
+	cursorRef: CursorRef = <raw:div />
 }, cleanup) => {
 	if (!(cursor instanceof Observer)) cursor = Observer.mutable(cursor);
-	if (!Ref) Ref = <raw:div />;
+	if (!(selection instanceof Observer)) selection = Observer.mutable(selection);
 
-	const ValueRef = <raw:span />;
-	const CursorRef = <raw:div />;
-
+	const mouseUp = Observer.mutable(false);
 	const lastMoved = Observer.mutable(Date.now());
 	const timeToFirstBlink = 250; // Time in ms to wait before starting to blink
 	const blinkInterval = 400; // Blink phase duration in ms
 
-	const updateCursorPosition = () => {
+	const updateCursorPosition = (pos) => {
+		console.log(pos);
 		lastMoved.set(Date.now());
-
-		const pos = cursor.get();
 
 		const textNode = ValueRef.firstChild;
 		if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return;
@@ -136,7 +136,7 @@ const Text = ({
 		const rects = range.getClientRects();
 		if (rects.length > 0); {
 			const rect = rects[0];
-			const parentRect = Ref.getBoundingClientRect();
+			const parentRect = WrapperRef.getBoundingClientRect();
 
 			CursorRef.style.left = `${rect.left - parentRect.left}px`;
 			CursorRef.style.top = `${rect.top - parentRect.top}px`;
@@ -144,18 +144,56 @@ const Text = ({
 		}
 	};
 
-	const onClick = (e) => {
+	const getCursorPos = (e) => {
 		const selection = window.getSelection();
-		if (!selection.rangeCount) return;
+		if (!selection.rangeCount) return null;
 
-		const range = selection.getRangeAt(0);;
+		const range = selection.getRangeAt(0);
 		const preCaretRange = range.cloneRange();
 		preCaretRange.selectNodeContents(ValueRef);
 		preCaretRange.setEnd(range.startContainer, range.startOffset);
-		const charIndex = preCaretRange.toString().length;
-
-		cursor.set(charIndex);
+		return preCaretRange.toString().length;
 	};
+
+	const onClick = (e) => {
+		if (!mouseUp) {
+			const charIndex = getCursorPos(e);
+			if (charIndex !== null) {
+				cursor.set(charIndex);
+			}
+		}
+	};
+
+	const onMouseUp = (e) => {
+		mouseUp.set(true);
+		const selection = window.getSelection();
+		if (!selection.rangeCount) return;
+
+		const range = selection.getRangeAt(0);
+
+		const preCaretRange = range.cloneRange();
+		preCaretRange.selectNodeContents(ValueRef);
+		preCaretRange.setEnd(range.startContainer, range.startOffset);
+		const startIndex = preCaretRange.toString().length;
+
+		const postCaretRange = range.cloneRange();
+		postCaretRange.selectNodeContents(ValueRef);
+		postCaretRange.setEnd(range.endContainer, range.endOffset);
+		const endIndex = postCaretRange.toString().length;
+
+		// Check if the selection was made from start-to-end or end-to-start
+		// And select the focus position as the endpoint of the selection.
+		let finalIndex;
+		if (selection.anchorOffset < selection.focusOffset) {
+			finalIndex = endIndex; // Selection was made from start to end
+		} else {
+			finalIndex = startIndex; // Selection was made from end to start
+		}
+
+		cursor.set(finalIndex);
+		mouseUp.set(false);
+	};
+
 
 	const onPaste = (e) => {
 		e.preventDefault();
@@ -182,13 +220,13 @@ const Text = ({
 		return i;
 	};
 
-	// stub:
 	const onKeyDown = async (e) => {
 		const curIndx = cursor.get();
 		const curValue = value.get();
-		console.log(e.key);
 
 		switch (e.key) {
+
+			// TODO: Add support for esc button to cancel selection.
 			case 'ArrowLeft':
 				if (curIndx > 0) {
 					const newIndex = e.ctrlKey
@@ -235,14 +273,18 @@ const Text = ({
 		}
 	};
 
+	// TODO: On mouse up, after a selection, move the cursor to where the user has finished selecting, the oposite of the initial onMouseDown cursor.get() value somehow?
+
 	window.addEventListener('keydown', onKeyDown);
-	Ref.addEventListener('click', onClick);
-	Ref.addEventListener('paste', onPaste);
+	WrapperRef.addEventListener('click', onClick);
+	WrapperRef.addEventListener('paste', onPaste);
+	WrapperRef.addEventListener('mouseup', onMouseUp);
 
 	cleanup(() => {
 		window.removeEventListener('keydown', onKeyDown);
-		Ref.removeEventListener('click', onClick);
-		Ref.removeEventListener('paste', onPaste);
+		WrapperRef.removeEventListener('click', onClick);
+		WrapperRef.removeEventListener('paste', onPaste);
+		WrapperRef.removeEventListener('mouseup', onMouseUp);
 	});
 
 	cleanup(cursor.effect(updateCursorPosition));
@@ -251,8 +293,8 @@ const Text = ({
 		queueMicrotask(updateCursorPosition);
 	}
 
-	return <Ref theme='textField'>
-		<ValueRef >
+	return <WrapperRef theme='textField' role="textbox">
+		<ValueRef>
 			{value.map(v => v === '' ? '\u200B' : v)}
 		</ValueRef>
 		<Shown value={cursor.map(p => p !== null)}>
@@ -264,7 +306,7 @@ const Text = ({
 				})
 			}} />
 		</Shown>
-	</Ref>;
+	</WrapperRef>;
 };
 
 // Example/test:
