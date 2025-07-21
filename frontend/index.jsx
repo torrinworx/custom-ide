@@ -63,6 +63,11 @@ mount(document.body, <Theme value={theme.theme}>
 		]} >
 			<TextField style={{ background: 'black' }} value={value} cursorRef={cursorRef} />
 			<Typography label={value} />
+			<Typography>
+				Hello World!
+				<br />
+				Hello World!
+			</Typography>
 		</TextModifiers>
 	</Icons>
 </Theme>);

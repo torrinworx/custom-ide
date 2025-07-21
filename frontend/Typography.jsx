@@ -1,64 +1,13 @@
-// A modification of the Typography component in destamatic-ui to support modifiers.
-
-// would be cool if we use context so that different modifiers could be applied to different contexts.
-
-
 import { createContext } from 'destamatic-ui';
-
 
 export const TextModifiers = createContext(() => null, (value) => {
 
     return value;
 });
 
-/*
-Idea: modifier system that uses regex? If string == "hello world", automatically splice that out
-before rendering it. and modify it according to the users modifiers?
-const modifiers = [
-    (value) => {
-        if (value.get() === 'hello world') {
-            return <div style={{ color: 'red' }}>HELLO WORLD</div>
-        }
-    }
-];
-
-allows for regex? which could mean easier integration with https://highlightjs.org/ or something like that? idk.
-would be cool
-
-could also allow for links and inline popups easily:
-const modifiers = [
-    (value) => {
-        if (value.get() === 'hello world') {
-            return <Button onClick={() => console.log('hello world')} >HELLO WORLD</Button>
-        }
-    }
-];
-
-then the result of the modifier is returned and rendered. I'm confused on the best way to do this though.
-
-because the above is computationally wastful.
-
-Maybe something like this:
-
-const modifiers = [
-    {
-        check: /^hello world$/, // could be regex, or string to auto compare to.
-        return: () => {
-            return <Button onClick={() => console.log('hello world')} >HELLO WORLD</Button>
-        }
-    }
-];
-
-then below we do: 
-value.effect(e => {
-    for i in modifiers {
-        if (e === i.check) { // contains this? Idk how to find the exact string inside this (e) string
-            // slice value into two separate spans, before and after the regex match
-            // i.return is then rendered between those two spans. 
-        }
-    }
-})
-*/
+// first order of business: remove the stupid double click to modify Typography thing. 
+// it violates the separation of concernes. It should be a customization that a user of
+// the library adds themselves, and should not be confused with actual component functionality.
 
 const applyModifiers = (label, modifiers) => {
     if (!label) return [];
@@ -114,7 +63,6 @@ const applyModifiers = (label, modifiers) => {
         }
     }
 
-    console.log(result)
     return result;
 };
 
@@ -122,16 +70,26 @@ const applyModifiers = (label, modifiers) => {
 export const Typography = TextModifiers.use(modifiers => ({
     type = 'h1',
     label = '',
+    children,
     ref: Ref = <raw:span />,
     ...props
 }) => {
-    // ENSURE: We don't want applymodifiers running if at all for efficiency if there aren't any modifiers.
-    const parts = label.map(l => applyModifiers(l, modifiers || []));
+    let display = null;
+
+    if (children.length > 0) {
+        display = children
+    } else if (label) { // mofidiers only run on label and if modifiers provided.
+        if (modifiers.length > 0) {
+            display = label.map(l => applyModifiers(l, modifiers || []));
+        } else {
+            display = label;
+        }
+    }
 
     return <Ref
         {...props}
         theme={['row', 'typography', ...Array.isArray(type) ? type : type.split('_')]}
     >
-        {parts}
+        {display}
     </Ref>;
 });
