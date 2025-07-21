@@ -122,7 +122,7 @@ const applyModifiers = (label, modifiers) => {
 export const Typography = TextModifiers.use(modifiers => ({
     type = 'h1',
     label = '',
-    ref: Ref = <raw:div />,
+    ref: Ref = <raw:span />,
     ...props
 }) => {
     // ENSURE: We don't want applymodifiers running if at all for efficiency if there aren't any modifiers.

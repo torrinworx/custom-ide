@@ -6,7 +6,6 @@ import theme from './theme';
 import TextField from './TextField';
 import { Typography, TextModifiers } from './Typography';
 
-
 // Example/test:
 const value = Observer.mutable('Hello World! :frog: :heart: :turtle:');
 const cursor = Observer.mutable(6);

@@ -256,7 +256,8 @@ export const TextField = ({
 	// Manually set tabindex so that focus/blur are enabled on WrapperRef. Let's us avoid having to manually pipe a custom focus/blur.
 	return <WrapperRef theme='textField' role="textbox" tabindex={tabIndex} {...props}>
 		<ValueRef>
-			{/* <Typography label={value.map(v => v === '' ? '\u200B' : v)} /> */}
+			{/* ValueRef is failing here for some reason, unable to set cursor position with weird elements beneath it. */}
+			{/* <Typography ref={ValueRef} label={value.map(v => v === '' ? '\u200B' : v)} /> */}
 			{value.map(v => v === '' ? '\u200B' : v)}
 		</ValueRef>
 		<Shown value={cursor.map(c => c !== null)}>
