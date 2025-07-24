@@ -11,10 +11,11 @@ Theme.define({
 		color: 'white',
 	},
 	cursor: { // TODO:  some cool way to invert the colors of the contents beneath the cursor? Like in vscode?
-		position: 'absolute',
+		top: 0,
 		width: 4,
-		background: 'orange',
-		top: 0
+		extends: 'radius',
+		position: 'absolute',
+		background: 'white',
 	},
 	// TODO: Look into styling and themeing selected text??
 })
@@ -112,6 +113,7 @@ export const TextField = ({
 
 		const sel = selection.get();
 		if (!sel) return;
+		console.log(sel);
 
 		const { end, side } = sel;
 		if (!end?.node) return;
@@ -223,9 +225,13 @@ export const TextField = ({
 				// if no matchedEntry, return right most entry with largest atomicIndex.
 				const largest = entries.reduce((max, current) =>
 					max.atomicIndex > current.atomicIndex ? max : current, entries[0]);
-				return displayMap.find(f => f.index == (largest.atomicIndex + 1));
+				return displayMap.find(f => f.index === (largest.atomicIndex + 1));
 			} else return matchedEntry;
 		};
+
+		// TODO: Work when no spans, just text, is in the text Typography. so no displayMap?
+		// maybe we write Typography to always use displayMap if provided regardless if there
+		// are modifiers.
 
 		let start;
 		const startAtomic = anchorNode?.getAttribute('atomic');
@@ -253,14 +259,112 @@ export const TextField = ({
 		selection.set({ start: null, end: null, side: null });
 	};
 
+	// really basic, maybe even let user define it:
+	const findWordBoundary = (text, index, direction) => {
+		let i = index;
+		if (direction === 'left') {
+			while (i > 0 && text[i - 1] === ' ') i--;
+			while (i > 0 && text[i - 1] !== ' ') i--;
+		} else if (direction === 'right') {
+			while (i < text.length && text[i] === ' ') i++;
+			while (i < text.length && text[i] !== ' ') i++;
+		}
+		return i;
+	};
+
+	const onKeyDown = async (e) => {
+		console.log(e.key);
+
+		// if (!isFocused.get()) return;
+
+		const sel = selection.get();
+
+		// TODO: Ctrl + a selection disables default and only selects all text within value.
+		const onArrowKey = (direction, sel, displayMap, selection) => {
+			const indexAdjustment = direction === 'left' ? -1 : 1;
+			const newSide = direction;
+
+			// Remember: index of an item in displayMap is what the cursor should be on
+			// not the index within each item, that's the character index it represents
+			// from the text value/label.
+			const start = displayMap[displayMap.indexOf(sel.end) + indexAdjustment];
+
+			if (start) {
+				const newSelection = sel.side === newSide ?
+					{ start, end: start, side: newSide } :
+					{ start: sel.start, end: sel.end, side: newSide };
+
+				// Check if the new selection differs from the current selection
+				if (!(newSelection.start === sel.start
+					&& newSelection.end === sel.end
+					&& newSelection.side === sel.side)) {
+					selection.set(newSelection);
+				}
+			} else {
+				const currentSelection = { start: sel.start, end: sel.end, side: newSide };
+
+				// Only update if the current selection has changed
+				if (!(currentSelection.start === sel.start
+					&& currentSelection.end === sel.end
+					&& currentSelection.side === sel.side)) {
+					selection.set(currentSelection);
+				}
+			}
+		};
+
+		switch (e.key) {
+			case 'ArrowLeft':
+				onArrowKey('left', sel, displayMap, selection);
+				break;
+			case 'ArrowRight':
+				onArrowKey('right', sel, displayMap, selection);
+				break;
+			case 'Backspace':
+				// backspace characters, remove chunks with ctrl + Backspace using findWordBoundry
+				break;
+			case 'Delete':
+				// delete characters, remove chunks with ctrl + Backspace using findWordBoundry 
+				break;
+			case 'Enter':
+				break;
+			case 'Escape':
+				selection.set({ start: null, end: null, side: null });
+				break;
+			default:
+				// add characters to value
+				break;
+		}
+	};
+
+	const onPaste = (e) => {
+		e.preventDefault();
+		const pasteText = e.clipboardData.getData('text/plain');
+		/*
+		something like this but with the new displayMap api:
+
+		const curIndx = cursor.get();
+		const curValue = value.get();
+
+		const newValue = curValue.slice(0, curIndx) + pasteText + curValue.slice(curIndx);
+		value.set(newValue);
+		cursor.set(curIndx + pasteText.length);
+		*/
+	};
+
+	isFocused.watch(() => console.log('isFocused: ', isFocused.get()));
+	// elements, atomic/non-atomic I think? Are hijacking our events for some reason. needs to be prevented.
 	WrapperRef.addEventListener('mouseup', onMouseUp);
 	WrapperRef.addEventListener('focus', onFocus, true);
 	WrapperRef.addEventListener('blur', onBlur, true);
+	WrapperRef.addEventListener('keydown', onKeyDown);
+	WrapperRef.addEventListener('paste', onPaste);
 
 	cleanup(() => {
 		WrapperRef.removeEventListener('mouseup', onMouseUp);
 		WrapperRef.removeEventListener('focus', onFocus, true);
 		WrapperRef.removeEventListener('blur', onBlur, true);
+		WrapperRef.addEventListener('keydown', onKeyDown);
+		WrapperRef.removeEventListener('paste', onPaste);
 	});
 
 	mounted(() => {
