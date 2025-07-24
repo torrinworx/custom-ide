@@ -14,6 +14,7 @@ Theme.define({
 		position: 'absolute',
 		width: 4,
 		background: 'orange',
+		top: 0
 	},
 	// TODO: Look into styling and themeing selected text??
 })
@@ -107,14 +108,16 @@ export const TextField = ({
 
 	const updateCursorPosition = () => {
 		lastMoved.set(Date.now());
+		const wrapperRect = WrapperRef.getBoundingClientRect();
+
 		const sel = selection.get();
 		if (!sel) return;
 
 		const { end, side } = sel;
 		if (!end?.node) return;
 
-		// A small BFS (or DFS) helper for finding a text node with content == matchText
-		function findNodeWithMatchingText(root, matchText) {
+		// Find a text node with content == matchText
+		const matchNodeText = (root, matchText) => {
 			const queue = [root];
 			while (queue.length) {
 				const current = queue.shift();
@@ -130,16 +133,14 @@ export const TextField = ({
 			return null;
 		}
 
-		const wrapperRect = WrapperRef.getBoundingClientRect();
 		const range = document.createRange();
 
 		// offset is how far into the text we want to place the caret
 		// e.g. offset = end.atomicIndex - end.index
 		const offset = end.atomicIndex - end.index;
 
-		if (end.atomic === false) {
-			// Non-atomic: find the exact text node whose .nodeValue == end.match
-			const textNode = findNodeWithMatchingText(end.node, end.match)
+		if (end.atomic === false) { // Non-atomic: find the exact text node whose .nodeValue == end.match
+			const textNode = matchNodeText(end.node, end.match)
 				?? end.node.firstChild
 				?? end.node;
 
@@ -168,31 +169,20 @@ export const TextField = ({
 
 			let rect = finalRects[0];
 			let left = rect.left - wrapperRect.left;
-			if (side === 'right') {
-				left = rect.right - wrapperRect.left;
-			}
-			const top = rect.top - wrapperRect.top;
+			if (side === 'right') left = rect.right - wrapperRect.left;
 
 			CursorRef.style.left = `${left}px`;
-			CursorRef.style.top = `${top}px`;
-			CursorRef.style.height = `${rect.height}px`;
-			CursorRef.style.opacity = '1';
-		} else {
-			// Atomic: measure the bounding box of the entire node
+		} else {// Atomic: measure the bounding box of the entire node
 			range.selectNode(end.node);
 			const rect = range.getBoundingClientRect();
 
 			let left = rect.left - wrapperRect.left;
-			let top = rect.top - wrapperRect.top;
 			if (side === 'right') {
 				left += rect.width;
 			}
-
 			CursorRef.style.left = `${left}px`;
-			CursorRef.style.top = `${top}px`;
-			CursorRef.style.height = `${rect.height}px`;
-			CursorRef.style.opacity = '1';
 		}
+		CursorRef.style.height = `${wrapperRect.height}px`;
 	};
 
 	const findDisplayNode = (node) => {
