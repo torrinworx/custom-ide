@@ -40,6 +40,9 @@ TODO:
   network thing will work with value somehow.
 - Shift + arrow keys == select text, each arrow key press in either direction adds or subtracts from the selection like in a code editor.
 - Handle text injection into the selection when selecting a none-text element injected by Typography modifier.
+
+
+- Make cursor the same height as WrapperRef no matter the element size. it should never match the size of the element.
 */
 
 export const TextField = ({

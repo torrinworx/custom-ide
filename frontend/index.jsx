@@ -56,7 +56,7 @@ mount(document.body, <Theme value={theme.theme}>
 			{
 				check: /button/gi,
 				return: (match) => <Button type='contained'>{match}</Button>,
-				atomic: false,
+				atomic: true,
 			},
 			{
 				check: /:([a-zA-Z0-9_]+):/g,
