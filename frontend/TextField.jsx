@@ -1,4 +1,4 @@
-import { Observer } from 'destam';
+import { Observer, OArray } from 'destam';
 import { Theme, Shown, Typography } from 'destamatic-ui';
 
 Theme.define({
@@ -11,10 +11,9 @@ Theme.define({
 		color: 'white',
 	},
 	cursor: { // TODO:  some cool way to invert the colors of the contents beneath the cursor? Like in vscode?
-		extends: 'radius',
 		position: 'absolute',
-		width: 8,
-		background: 'white',
+		width: 4,
+		background: 'orange',
 	},
 	// TODO: Look into styling and themeing selected text??
 })
@@ -39,22 +38,64 @@ TODO:
 - Add temp history, maybe we don't need network? Just an array with value.effect? for ctrl + z and ctrl + shift + z
 - For larger history, cross lines, for something like an ide, let's assume some external
   network thing will work with value somehow.
-- Select text - fix cursor to end at the end of a selection, right now this is broken
 - Shift + arrow keys == select text, each arrow key press in either direction adds or subtracts from the selection like in a code editor.
+- Handle text injection into the selection when selecting a none-text element injected by Typography modifier.
 */
 
 export const TextField = ({
 	value,
-	cursor = null,
-	selection = { start: null, end: null },
+	selection = { start: null, end: null, side: null },
 	wrapperRef: WrapperRef = <raw:div />,
 	valueRef: ValueRef = <raw:span />,
 	cursorRef: CursorRef = <raw:div />,
 	tabIndex = 0,
 	...props
 }, cleanup, mounted) => {
-	if (!(cursor instanceof Observer)) cursor = Observer.mutable(cursor);
 	if (!(selection instanceof Observer)) selection = Observer.mutable(selection);
+
+	const displayMap = OArray([]);
+	/*
+	if an element in display map is atomic=true, element will be treated as a single item:
+	- no inner element text selection, no copying of element, or it's text content to the clipboard
+	- cursor snaps to either side of the single atomic element, inner cursor index placement, through arrows or onMouseUp, will be reconciled to the left or right side of the element.
+
+	if an element is atomic = true, or atomic is undefined, the element will be treated as such:
+	- the original text, from value, that the element is converted to, is copyable and selectable.
+	- cursor snaps to position within the element, in accordance to the textContent of the node, if textContent != the elements content in value, the element will be treated as atomic
+
+	displayMap returns two types of items: atomic, and non-atomic. displayMap is a reconsilor, it helps us determine, modify, and set the cursor position regardless of the elements
+	condition, normal text, atomic, non-atomic/fragment. This let's us include normal text, atomic elements, 
+
+	atomic: atomic elements can be either single characters, simply from normal text. Or they can be an dom elements returned by a text modifier, that wishes to be treated as a single
+	character.
+
+	atomic displayMap entry: {
+		index: int, // the start index of the element in Typography value.
+		length: int, // the number of characters this element represents, remember this can either be a single character, or an atomic one due to text modifiers. 
+		node: <>, // the node reference returned by the Typography modifier.
+		displayId, // a unique displayMap entry identifier.
+		...props, // other props passed in by modifiers.
+	};
+
+	non-atomic: non atomic elements are dom elements that have been fragmented so that their inner text act as if they were individual text characters in the text field. This allows for
+	advanced styling while maintaining the functionality of normal text within the textField.
+
+	non-atomic displayMap element fragment entry: {
+		index: int, // the start index in the Typography value param the whole element starts at.
+		node: <>, // the node reference returned by the typography modifier.
+		displayId: hash, // a unique identifier, remians the same for all elements of the same non-atomic element.
+		atomic: bool, // if false, indicator that this element is a non-atomic element.
+		atomicIndex: int, index of this non-atomic element fragment within the string value passed to Typography.
+		match: str, // the non-atomic element string the modifier was matched to.
+		...props, // other props we can assign in modifiers, (not controlled in TextField).
+	};
+
+	a non atomic element is broken down into multiple entries into displayMap based on the text value it represents
+	in the text modifier applied to it. The nodes textContent basically.
+
+	After the displayMap is updated, we need a function that can take the current position of the cursor within displayMap and convert it into the actual position within the value string.
+	This can be used to delete and add characters properly within the value string. All goes well this should be a solid system if not a bit messy.
+	*/
 
 	const isFocused = Observer.mutable(false);
 	const lastMoved = Observer.mutable(Date.now());
@@ -63,201 +104,184 @@ export const TextField = ({
 
 	const updateCursorPosition = () => {
 		lastMoved.set(Date.now());
-		const pos = cursor.get();
+		const sel = selection.get();
+		if (!sel) return;
 
-		const textNode = ValueRef.firstChild;
-		if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return;
+		const { end, side } = sel;
+		if (!end?.node) return;
 
+		// A small BFS (or DFS) helper for finding a text node with content == matchText
+		function findNodeWithMatchingText(root, matchText) {
+			const queue = [root];
+			while (queue.length) {
+				const current = queue.shift();
+				// Check if current is exactly a text node with matching contents
+				if (current.nodeType === Node.TEXT_NODE && current.nodeValue === matchText) {
+					return current;
+				}
+				// Otherwise enqueue children
+				for (let i = 0; i < current.childNodes.length; i++) {
+					queue.push(current.childNodes[i]);
+				}
+			}
+			return null;
+		}
+
+		const wrapperRect = WrapperRef.getBoundingClientRect();
 		const range = document.createRange();
-		range.setStart(textNode, Math.min(pos, textNode.length));
-		range.setEnd(textNode, Math.min(pos, textNode.length));
 
-		const rects = range.getClientRects();
-		if (rects.length > 0); {
-			const rect = rects[0];
-			const parentRect = WrapperRef.getBoundingClientRect();
+		// offset is how far into the text we want to place the caret
+		// e.g. offset = end.atomicIndex - end.index
+		const offset = end.atomicIndex - end.index;
 
-			CursorRef.style.left = `${rect.left - parentRect.left}px`;
-			CursorRef.style.top = `${rect.top - parentRect.top}px`;
+		if (end.atomic === false) {
+			// Non-atomic: find the exact text node whose .nodeValue == end.match
+			const textNode = findNodeWithMatchingText(end.node, end.match)
+				?? end.node.firstChild
+				?? end.node;
+
+			if (!textNode) return;
+
+			// Clamp offset if needed
+			const textLength = textNode.nodeValue?.length ?? 0;
+			const caretOffset = Math.max(0, Math.min(offset, textLength));
+
+			try {
+				range.setStart(textNode, caretOffset);
+				range.setEnd(textNode, caretOffset);
+			} catch (err) {
+				// Fallback if offset is invalid
+				range.selectNode(end.node);
+			}
+
+			const rects = range.getClientRects();
+			if (!rects || rects.length === 0) {
+				// fallback: use bounding box of entire node
+				range.selectNode(end.node);
+			}
+
+			const finalRects = range.getClientRects();
+			if (!finalRects || finalRects.length === 0) return;
+
+			let rect = finalRects[0];
+			let left = rect.left - wrapperRect.left;
+			if (side === 'right') {
+				left = rect.right - wrapperRect.left;
+			}
+			const top = rect.top - wrapperRect.top;
+
+			CursorRef.style.left = `${left}px`;
+			CursorRef.style.top = `${top}px`;
 			CursorRef.style.height = `${rect.height}px`;
+			CursorRef.style.opacity = '1';
+		} else {
+			// Atomic: measure the bounding box of the entire node
+			range.selectNode(end.node);
+			const rect = range.getBoundingClientRect();
+
+			let left = rect.left - wrapperRect.left;
+			let top = rect.top - wrapperRect.top;
+			if (side === 'right') {
+				left += rect.width;
+			}
+
+			CursorRef.style.left = `${left}px`;
+			CursorRef.style.top = `${top}px`;
+			CursorRef.style.height = `${rect.height}px`;
+			CursorRef.style.opacity = '1';
 		}
 	};
 
-	const selectionChange = () => {
-		const sel = selection.get();
-		const textNode = ValueRef.firstChild;
-		if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return;
-
-		const range = document.createRange();
-		range.setStart(textNode, Math.min(sel.start, textNode.length));
-		range.setEnd(textNode, Math.min(sel.end, textNode.length));
-
-		const windowSelection = window.getSelection();
-		if (!windowSelection) return;
-
-		windowSelection.removeAllRanges();
-		windowSelection.addRange(range);
+	const findDisplayNode = (node) => {
+		while (node && node !== WrapperRef) {
+			if (node.nodeType === Node.ELEMENT_NODE && node.hasAttribute('displayId')) {
+				return node;
+			}
+			node = node.parentNode;
+		}
+		return null;
 	};
 
-	// possible bug: if the onMouseUp is outside the WrapperRef the cursor location isn't updated to finalIndex properly?
 	const onMouseUp = (e) => {
 		const sel = window.getSelection();
 		if (!sel || sel.rangeCount === 0) return;
 
-		const textNode = ValueRef.firstChild;
+		const anchorNode = findDisplayNode(sel.anchorNode);
+		const focusNode = findDisplayNode(sel.focusNode);
 
-		if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return;
+		const getEntry = (id) => displayMap.find(f => f.displayId === id);
 
-		const anchorOffset = sel.anchorOffset;
-		const focusOffset = sel.focusOffset;
+		// Get the atomic fragment in displayMap if the element displayId is associated with a non-atomic element.
+		const getFragment = (id, offset) => {
+			const entry = getEntry(id);
+			const textContent = entry.node.textContent;
+			const match = entry.match;
 
-		const start = Math.min(anchorOffset, focusOffset);
-		const end = Math.max(anchorOffset, focusOffset);
+			if (textContent !== match) {
+				console.error('An atomic element must contain the exact text provided in the text modifier.')
+				return entry; // fallback and just treat it like a normal atomic entry
+			}
 
-		selection.set({ start, end });
+			const entries = displayMap.filter(f => f.displayId === id); // list of atomic fragments for given displayId non-atomic element.
+			// find individual displayMap fragment entry and return it here.
+			const matchedEntry = entries.find(f => offset === (f.atomicIndex - f.index));
 
-		cursor.set(focusOffset);
+			if (!matchedEntry) { // means that user selected right side of last character and index is on the next element in displayMap.
+				// if no matchedEntry, return right most entry with largest atomicIndex.
+				const largest = entries.reduce((max, current) =>
+					max.atomicIndex > current.atomicIndex ? max : current, entries[0]);
+				return displayMap.find(f => f.index == (largest.atomicIndex + 1));
+			} else return matchedEntry;
+		};
+
+		let start;
+		const startAtomic = anchorNode?.getAttribute('atomic');
+		const startId = anchorNode.getAttribute('displayId');
+		if (startAtomic === "false") start = getFragment(startId, sel.anchorOffset);
+		else start = getEntry(startId);
+
+		let end;
+		const endAtomic = focusNode?.getAttribute('atomic');
+		const endId = focusNode.getAttribute('displayId');
+		console.log(focusNode, endAtomic, endId);
+		if (endAtomic === "false") end = getFragment(endId, sel.focusOffset);
+		else end = getEntry(endId);
+
+		const rect = end.node.getBoundingClientRect();
+		const mid = rect.left + rect.width / 2;
+		const side = e.clientX < mid ? 'left' : 'right';
+
+		selection.set({ start, end, side });
 	};
-
-	const onPaste = (e) => {
-		e.preventDefault();
-		const pasteText = e.clipboardData.getData('text/plain');
-		const curIndx = cursor.get();
-		const curValue = value.get();
-
-		const newValue = curValue.slice(0, curIndx) + pasteText + curValue.slice(curIndx);
-		value.set(newValue);
-		cursor.set(curIndx + pasteText.length);
-	};
-
-	const findWordBoundary = (text, index, direction) => {
-		let i = index;
-		if (direction === 'left') {
-			while (i > 0 && text[i - 1] === ' ') i--;
-			while (i > 0 && text[i - 1] !== ' ') i--;
-		} else if (direction === 'right') {
-			while (i < text.length && text[i] === ' ') i++;
-			while (i < text.length && text[i] !== ' ') i++;
-		}
-		return i;
-	};
-
-	const onKeyDown = async (e) => {
-		if (!isFocused.get()) return;
-		const curIndx = cursor.get();
-		const curValue = value.get();
-		const { start, end } = selection.get();
-		const [minIndx, maxIndx] = [Math.min(start, end), Math.max(start, end)];
-
-		// TODO: Ctrl + a selection disables default and only selects all text within value.
-		switch (e.key) {
-			case 'ArrowLeft':
-				if (start != null || end != null) {
-					selection.set({ start: null, end: null });
-					cursor.set(Math.min(start, end));
-
-				} else if (curIndx > 0) {
-					const newIndex = e.ctrlKey
-						? findWordBoundary(curValue, curIndx, 'left')
-						: curIndx - 1;
-					cursor.set(newIndex);
-				}
-				break;
-			case 'ArrowRight':
-				if (start != null || end != null) {
-					selection.set({ start: null, end: null });
-					cursor.set(Math.max(start, end));
-				} else if (curIndx < curValue.length) {
-					const newIndex = e.ctrlKey
-						? findWordBoundary(curValue, curIndx, 'right')
-						: curIndx + 1;
-					cursor.set(newIndex);
-				}
-				break;
-
-			case 'Backspace':
-				if (start != null || end != null) {
-					value.set(curValue.slice(0, minIndx) + curValue.slice(maxIndx));
-					cursor.set(minIndx);
-					selection.set({ start: null, end: null });
-				} else if (curIndx > 0) {
-					const start = e.ctrlKey
-						? findWordBoundary(curValue, curIndx, 'left')
-						: curIndx - 1;
-					value.set(curValue.slice(0, start) + curValue.slice(curIndx));
-					cursor.set(start);
-				}
-				break;
-			case 'Delete':
-				if (start != null || end != null) {
-					value.set(curValue.slice(0, minIndx) + curValue.slice(maxIndx));
-					cursor.set(minIndx);
-					selection.set({ start: null, end: null });
-				} else if (curIndx < curValue.length) {
-					const end = e.ctrlKey
-						? findWordBoundary(curValue, curIndx, 'right')
-						: curIndx + 1;
-					value.set(curValue.slice(0, curIndx) + curValue.slice(end));
-				}
-				break;
-			case 'Enter':
-				break;
-			case 'Escape':
-				selection.set({ start: null, end: null });
-				break;
-			default:
-				if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
-					value.set(curValue.slice(0, curIndx) + e.key + curValue.slice(curIndx));
-					cursor.set(curIndx + 1);
-				}
-				break;
-		}
-	};
-
-	// TODO: On mouse up, after a selection, move the cursor to where the user has finished selecting, the oposite of the initial onMouseDown cursor.get() value somehow?
 
 	const onFocus = () => isFocused.set(true);
 	const onBlur = () => {
 		isFocused.set(false);
-		selection.set({ start: null, end: null });
-		cursor.set(null);
+		selection.set({ start: null, end: null, side: null });
 	};
 
-	WrapperRef.addEventListener('keydown', onKeyDown);
-	WrapperRef.addEventListener('paste', onPaste);
 	WrapperRef.addEventListener('mouseup', onMouseUp);
 	WrapperRef.addEventListener('focus', onFocus, true);
 	WrapperRef.addEventListener('blur', onBlur, true);
 
 	cleanup(() => {
-		WrapperRef.removeEventListener('keydown', onKeyDown);
-		WrapperRef.removeEventListener('paste', onPaste);
 		WrapperRef.removeEventListener('mouseup', onMouseUp);
 		WrapperRef.removeEventListener('focus', onFocus, true);
 		WrapperRef.removeEventListener('blur', onBlur, true);
 	});
 
 	mounted(() => {
-		cleanup(cursor.effect(updateCursorPosition));
-
-		// watch selection for user updates and apply to browser selection
-		cleanup(selection.effect(selectionChange));
-
-		queueMicrotask(selectionChange);
-		queueMicrotask(updateCursorPosition); // for some reason on initial render, cursor position is rendered wrong if the user of the componnet passes in a cursor index. it's just slightly shifted so that means the calculations aren't being done on a fully rendered component maybe?
+		cleanup(selection.effect(updateCursorPosition));
+		queueMicrotask(updateCursorPosition);
 	})
 
-	// TODO: onClick or onMouseDown outside of WrapperRef, run cursor.set(null); so that it wont appear anymore.
-	// TODO: Fix multiple Text components on the same page with key downs. only have keydowns on WrapperRef not window?
-
-	// Manually set tabindex so that focus/blur are enabled on WrapperRef. Let's us avoid having to manually pipe a custom focus/blur.
 	return <WrapperRef theme='textField' role="textbox" tabindex={tabIndex} {...props}>
-		{/* <ValueRef> */}
-		{/* ValueRef is failing here for some reason, unable to set cursor position with weird elements beneath it. */}
-		<Typography ref={ValueRef} label={value.map(v => Observer.mutable(v === '' ? '\u200B' : v)).unwrap()} />
-		{/* {value.map(v => v === '' ? '\u200B' : v)} */}
-		{/* </ValueRef> */}
-		<Shown value={cursor.map(c => c !== null)}>
+		<Typography
+			displayMap={displayMap}
+			ref={ValueRef}
+			label={value.map(v => Observer.mutable(v === '' ? '\u200B' : v)).unwrap()}
+		/>
+		<Shown value={selection.map(c => c.end !== null || c.start !== null)}>
 			<CursorRef theme='cursor' style={{
 				opacity: Observer.timer(blinkInterval).map(() => {
 					const delta = Date.now() - lastMoved.get();
