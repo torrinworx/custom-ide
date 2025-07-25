@@ -31,7 +31,6 @@ mount(document.body, <Theme value={theme.theme}>
 			{
 				check: '!',
 				return: (match) => <span style={{ color: 'red' }}>{match}</span>,
-				atomic: false, // atomic tells TextField to treat this as a single atomic element, or to treat it as text elements together.
 			},
 			{
 				check: '?',
@@ -48,9 +47,23 @@ mount(document.body, <Theme value={theme.theme}>
 				return: (match) => <div><div style={{ background: 'blue' }}>{match}</div></div>,
 				atomic: true,
 			},
-			{
+			{ // vscode style inline button.
 				check: /world/gi,
-				return: (match) => <div style={{ background: 'red' }}>{match}</div>,
+				return: (match) => {
+					const hover = Observer.mutable(false);
+					const CtrlKey = Observer.mutable(false);
+
+					document.addEventListener('keydown', e => {
+						if (e.key === 'Control') CtrlKey.set(true);
+					});
+					document.addEventListener('keyup', e => {
+						if (e.key === 'Control') CtrlKey.set(false);
+					});
+
+					const specialButton = Observer.all([hover, CtrlKey]).map(([h, c]) => h && c);
+
+					return <div isHovered={hover} style={{ cursor: specialButton.bool('pointer', 'inherit'), background: specialButton.bool('blue', 'red') }}>{match}</div>
+				},
 				atomic: false,
 			},
 			{
