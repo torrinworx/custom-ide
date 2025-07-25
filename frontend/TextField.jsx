@@ -42,9 +42,11 @@ TODO:
   network thing will work with value somehow.
 - Shift + arrow keys == select text, each arrow key press in either direction adds or subtracts from the selection like in a code editor.
 - Handle text injection into the selection when selecting a none-text element injected by Typography modifier.
-
-
 - Make cursor the same height as WrapperRef no matter the element size. it should never match the size of the element.
+- Consider what parameters need to be exposed to allow for collaboration, like cursor placement, text value, etc. not to
+  implement here, but maybe a small demo would be cool.
+- Fix up selection api so that copying text always copies value + atomic elements' textContent. We can ignore non-atomic fragments and
+  just use value since with them since their textContent must equal their modifier.
 */
 
 export const TextField = ({
@@ -107,16 +109,18 @@ export const TextField = ({
 	const timeToFirstBlink = 250; // Time in ms to wait before starting to blink
 	const blinkInterval = 400; // Blink phase duration in ms
 
-	const updateCursorPosition = () => {
+	const updateCursorPosition = (sel) => {
 		lastMoved.set(Date.now());
 		const wrapperRect = WrapperRef.getBoundingClientRect();
 
-		const sel = selection.get();
 		if (!sel) return;
-		console.log(sel);
 
 		const { end, side } = sel;
 		if (!end?.node) return;
+		console.log(end, side); // shows w left (first click down) and w right (first rightArrow button press) but no movement until second right arrow button press 
+		// in fragments, doesn't actually move to proper left/right side
+		// for some reason clicking on the right side of w doesn't take you to the right side of w even though it should?
+		// like wise for the left side, it skips to the next char.
 
 		// Find a text node with content == matchText
 		const matchNodeText = (root, matchText) => {
@@ -141,37 +145,30 @@ export const TextField = ({
 		// e.g. offset = end.atomicIndex - end.index
 		const offset = end.atomicIndex - end.index;
 
-		if (end.atomic === false) { // Non-atomic: find the exact text node whose .nodeValue == end.match
+		if (end.atomic === false) {
 			const textNode = matchNodeText(end.node, end.match)
 				?? end.node.firstChild
 				?? end.node;
 
 			if (!textNode) return;
 
-			// Clamp offset if needed
 			const textLength = textNode.nodeValue?.length ?? 0;
-			const caretOffset = Math.max(0, Math.min(offset, textLength));
+			const caretOffset = Math.max(0, Math.min(offset, textLength - 1));
 
 			try {
 				range.setStart(textNode, caretOffset);
-				range.setEnd(textNode, caretOffset);
+				range.setEnd(textNode, caretOffset + 1); // span over the character
 			} catch (err) {
-				// Fallback if offset is invalid
 				range.selectNode(end.node);
 			}
 
-			const rects = range.getClientRects();
-			if (!rects || rects.length === 0) {
-				// fallback: use bounding box of entire node
-				range.selectNode(end.node);
-			}
+			const rect = range.getBoundingClientRect();
+			if (!rect) return;
 
-			const finalRects = range.getClientRects();
-			if (!finalRects || finalRects.length === 0) return;
-
-			let rect = finalRects[0];
 			let left = rect.left - wrapperRect.left;
 			if (side === 'right') left = rect.right - wrapperRect.left;
+
+			console.log(side, left);
 
 			CursorRef.style.left = `${left}px`;
 		} else {// Atomic: measure the bounding box of the entire node
@@ -198,11 +195,14 @@ export const TextField = ({
 	};
 
 	const onMouseUp = (e) => {
-		const sel = window.getSelection();
-		if (!sel || sel.rangeCount === 0) return;
+		const windowSel = window.getSelection();
+		if (!windowSel || windowSel.rangeCount === 0) return;
 
-		const anchorNode = findDisplayNode(sel.anchorNode);
-		const focusNode = findDisplayNode(sel.focusNode);
+		// const curSel = selection.get();
+		// if (!curSel) return;
+
+		const anchorNode = findDisplayNode(windowSel.anchorNode);
+		const focusNode = findDisplayNode(windowSel.focusNode);
 
 		const getEntry = (id) => displayMap.find(f => f.displayId === id);
 
@@ -213,42 +213,65 @@ export const TextField = ({
 			const match = entry.match;
 
 			if (textContent !== match) {
-				console.error('An atomic element must contain the exact text provided in the text modifier.')
-				return entry; // fallback and just treat it like a normal atomic entry
+				console.error('An atomic element must contain the exact text provided in the text modifier.');
+				return entry;
 			}
 
-			const entries = displayMap.filter(f => f.displayId === id); // list of atomic fragments for given displayId non-atomic element.
-			// find individual displayMap fragment entry and return it here.
+			const entries = displayMap.filter(f => f.displayId === id);
 			const matchedEntry = entries.find(f => offset === (f.atomicIndex - f.index));
 
-			if (!matchedEntry) { // means that user selected right side of last character and index is on the next element in displayMap.
-				// if no matchedEntry, return right most entry with largest atomicIndex.
-				const largest = entries.reduce((max, current) =>
-					max.atomicIndex > current.atomicIndex ? max : current, entries[0]);
-				return displayMap.find(f => f.index === (largest.atomicIndex + 1));
-			} else return matchedEntry;
-		};
+			if (matchedEntry) return matchedEntry;
 
-		// TODO: Work when no spans, just text, is in the text Typography. so no displayMap?
-		// maybe we write Typography to always use displayMap if provided regardless if there
-		// are modifiers.
+			// NEW: handle when offset === match.length → place cursor at right side of last char
+			if (offset === match.length) {
+				const last = entries.at(-1);
+				return last;
+			}
+
+			// fallback for broken offset
+			const largest = entries.reduce((max, current) =>
+				max.atomicIndex > current.atomicIndex ? max : current, entries[0]);
+			return displayMap.find(f => f.index === (largest.atomicIndex + 1));
+		};
 
 		let start;
 		const startAtomic = anchorNode?.getAttribute('atomic');
 		const startId = anchorNode.getAttribute('displayId');
-		if (startAtomic === "false") start = getFragment(startId, sel.anchorOffset);
+		if (startAtomic === "false") start = getFragment(startId, windowSel.anchorOffset);
 		else start = getEntry(startId);
 
 		let end;
 		const endAtomic = focusNode?.getAttribute('atomic');
 		const endId = focusNode.getAttribute('displayId');
-		console.log(focusNode, endAtomic, endId);
-		if (endAtomic === "false") end = getFragment(endId, sel.focusOffset);
+		if (endAtomic === "false") end = getFragment(endId, windowSel.focusOffset);
 		else end = getEntry(endId);
 
-		const rect = end.node.getBoundingClientRect();
-		const mid = rect.left + rect.width / 2;
-		const side = e.clientX < mid ? 'left' : 'right';
+		let side;
+		if (endAtomic === "false") {
+			const offset = windowSel.focusOffset;
+			// something is fucked with the way this system handles non-atomic fragments
+			// direction changes result in the need to switch from the 
+			// Retrieve matching entry from your getFragment helper
+			const entries = displayMap.filter(f => f.displayId === endId);
+
+			const matched = entries.find(f => {
+				const start = f.atomicIndex - f.index;
+				const end = start + (f.char?.length || 1);
+				return offset >= start && offset < end;
+			});
+
+			if (!matched) {
+				side = 'right';
+			} else {
+				// Decide left/right based on offset within character
+				const charStart = matched.atomicIndex - matched.index;
+				side = offset <= charStart ? 'left' : 'right';
+			}
+		} else {
+			const rect = end.node.getBoundingClientRect();
+			const mid = rect.left + rect.width / 2;
+			side = e.clientX < mid ? 'left' : 'right';
+		}
 
 		selection.set({ start, end, side });
 	};
@@ -273,9 +296,7 @@ export const TextField = ({
 	};
 
 	const onKeyDown = async (e) => {
-		console.log(e.key);
-
-		// if (!isFocused.get()) return;
+		if (!isFocused.get()) return;
 
 		const sel = selection.get();
 
@@ -284,10 +305,12 @@ export const TextField = ({
 			const indexAdjustment = direction === 'left' ? -1 : 1;
 			const newSide = direction;
 
+			// weird bug in this code: there is a case sometimes where a 
+
 			// Remember: index of an item in displayMap is what the cursor should be on
 			// not the index within each item, that's the character index it represents
 			// from the text value/label.
-			const start = displayMap[displayMap.indexOf(sel.end) + indexAdjustment];
+			const start = displayMap[displayMap.indexOf(sel.end) + indexAdjustment]; // entry in displayMap to apply cursor to.
 
 			if (start) {
 				const newSelection = sel.side === newSide ?
@@ -321,6 +344,11 @@ export const TextField = ({
 				break;
 			case 'Backspace':
 				// backspace characters, remove chunks with ctrl + Backspace using findWordBoundry
+				// use selection, delete all items between and including start->end.
+				// within each item there is
+
+				const curValue = value.get();
+
 				break;
 			case 'Delete':
 				// delete characters, remove chunks with ctrl + Backspace using findWordBoundry 
@@ -351,7 +379,6 @@ export const TextField = ({
 		*/
 	};
 
-	isFocused.watch(() => console.log('isFocused: ', isFocused.get()));
 	// elements, atomic/non-atomic I think? Are hijacking our events for some reason. needs to be prevented.
 	WrapperRef.addEventListener('mouseup', onMouseUp);
 	WrapperRef.addEventListener('focus', onFocus, true);
@@ -363,7 +390,7 @@ export const TextField = ({
 		WrapperRef.removeEventListener('mouseup', onMouseUp);
 		WrapperRef.removeEventListener('focus', onFocus, true);
 		WrapperRef.removeEventListener('blur', onBlur, true);
-		WrapperRef.addEventListener('keydown', onKeyDown);
+		WrapperRef.removeEventListener('keydown', onKeyDown);
 		WrapperRef.removeEventListener('paste', onPaste);
 	});
 
