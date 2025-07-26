@@ -10,16 +10,19 @@
     "tauri": "tauri"
   },
   "devDependencies": {
-    "destamatic-ui": "file:destamatic-ui",
     "@babel/generator": "^7.28.0",
     "@babel/parser": "^7.28.0",
     "@babel/traverse": "^7.28.0",
     "@tauri-apps/api": "^2",
+    "@tauri-apps/cli": "^2",
     "@tauri-apps/plugin-opener": "^2",
     "destam": "^0.8.0",
     "destam-dom": "^0.14.0",
-    "@tauri-apps/cli": "^2",
+    "destamatic-ui": "file:destamatic-ui",
     "typescript": "~5.6.2",
     "vite": "^6.0.3"
+  },
+  "dependencies": {
+    "prismjs": "^1.30.0"
   }
 }

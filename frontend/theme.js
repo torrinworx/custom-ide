@@ -28,28 +28,6 @@ const theme = OObject({
         boxSizing: 'border-box',
         transition: `opacity ${transition}, box-shadow ${transition}, background-color ${transition}, color ${transition}, border-color ${transition}, stroke ${transition}, fill ${transition}`,
     }),
-
-    // primary: {
-    //     $color: '$color_main',
-    //     $color_text: '$contrast_text($color_main)',
-    //     $color_top: '$contrast_text($color_main)',
-    //     $color_hover: '$saturate($shiftBrightness($color_main, -.3), -.3)',
-    // },
-
-
-    // focused: {
-    //     boxShadow: 'none',
-    // },
-
-    field: {
-        extends: 'typography_p1_regular',
-        outline: 'none',
-        border: 'none',
-        padding: 10,
-        background: '$color_main',
-        color: '$color_top',
-    },
-
 });
 
 export default {
